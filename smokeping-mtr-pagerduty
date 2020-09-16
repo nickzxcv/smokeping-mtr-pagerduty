@@ -1,0 +1,77 @@
+#!/usr/bin/python3
+
+# Heavily inspired by and stolen from
+# https://github.com/catalyst/smokeping-mtr-alert and
+# https://github.com/logan2211/smokeping-mtr-alert
+
+import argparse
+import socket
+import shlex
+import subprocess
+import requests
+import datetime
+import json
+
+def collect_mtr(hostname):
+    mtr_command = "mtr -n --report %s" % shlex.quote(args.hostname)
+    try:
+        mtr_output = subprocess.check_output(mtr_command.split()).strip()
+        return {'cmd': mtr_command, 'output': str(mtr_output, 'utf-8')}
+    except:
+        sys.stderr.write('error running MTR.\n')
+        sys.exit(1)
+
+def send_to_pagerduty(api_endpoint, body_object):
+    requests.post(api_endpoint, json=body_object)
+
+if __name__ == "__main__":
+
+    hostname = socket.gethostname()
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('alert', help='name of the alert, supplied by smokeping')
+    parser.add_argument('target', help='target being monitored, supplied by smokeping')
+    parser.add_argument('loss_pattern', help='loss pattern that has triggered, supplied by smokeping')
+    parser.add_argument('rtt', help='current RTT for target, supplied by smokeping')
+    parser.add_argument('hostname', help='hostname of target, supplied by smokeping')
+    parser.add_argument('edgetrigger', help='edgetrigger state, supplied by smokeping')
+    parser.add_argument('--name', default=hostname, help='name of smokeping installation, defaults to hostname where the script runs')
+    parser.add_argument('--api-key', help='PagerDuty API key', required=True)
+    parser.add_argument('--severity', help='PagerDuty severity', default='critical')
+    parser.add_argument('--runbook', help='Link to runbook')
+
+    args = parser.parse_args()
+
+    now=datetime.datetime.now()
+    mtr_results=collect_mtr(args.hostname)
+	
+    pagerduty_request=dict()
+    pagerduty_request['routing_key']=args.api_key
+    if int(args.edgetrigger)==1:
+        pagerduty_request['event_action']="trigger"
+    elif int(args.edgetrigger)==0:
+        pagerduty_request['event_action']="resolve"
+
+    pagerduty_request['dedup_key']=args.target
+    pagerduty_request['payload']=dict()
+    pagerduty_request['payload']['summary']="{name} SmokePing {alert} alert: {target}".format(name=args.name, alert=args.alert, target=args.target)
+    pagerduty_request['payload']['source']=args.hostname
+    pagerduty_request['payload']['severity']=args.severity
+    pagerduty_request['payload']['timestamp']=now.isoformat()
+    pagerduty_request['payload']['custom_details']=dict()
+    pagerduty_request['payload']['custom_details']['mtr_command']=mtr_results['cmd']
+    pagerduty_request['payload']['custom_details']['mtr_output']=mtr_results['output']
+    pagerduty_request['payload']['custom_details']['alert_triggered']=args.alert
+    pagerduty_request['payload']['custom_details']['target']=args.target
+    pagerduty_request['payload']['custom_details']['target_hostname']=args.hostname
+    pagerduty_request['payload']['custom_details']['loss_pattern']=args.loss_pattern
+    pagerduty_request['payload']['custom_details']['RTT']=args.rtt
+    pagerduty_request['payload']['custom_details']
+    pagerduty_request['links']=list()
+    pagerduty_request['links'].append({
+        'href': 'http://{}/smokeping/smokeping.cgi?target={}'.format(hostname, args.target),
+        'text': 'http://{}/smokeping/smokeping.cgi?target={}'.format(hostname, args.target)})
+    if args.runbook is not None:
+        pagerduty_request['links'].append({'href': args.runbook, 'text': args.runbook})
+
+    send_to_pagerduty('https://events.pagerduty.com/v2/enqueue', pagerduty_request)
