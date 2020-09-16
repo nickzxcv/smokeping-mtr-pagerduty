@@ -10,7 +10,7 @@ import shlex
 import subprocess
 import requests
 import datetime
-import json
+
 
 def collect_mtr(hostname):
     mtr_command = "mtr -n --report %s" % shlex.quote(args.hostname)
@@ -20,6 +20,7 @@ def collect_mtr(hostname):
     except:
         sys.stderr.write('error running MTR.\n')
         sys.exit(1)
+
 
 def send_to_pagerduty(api_endpoint, body_object):
     requests.post(api_endpoint, json=body_object)
@@ -42,32 +43,31 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    now=datetime.datetime.now()
-    mtr_results=collect_mtr(args.hostname)
-	
-    pagerduty_request=dict()
-    pagerduty_request['routing_key']=args.api_key
-    if int(args.edgetrigger)==1:
-        pagerduty_request['event_action']="trigger"
-    elif int(args.edgetrigger)==0:
-        pagerduty_request['event_action']="resolve"
+    now = datetime.datetime.now()
+    mtr_results = collect_mtr(args.hostname)
 
-    pagerduty_request['dedup_key']=args.target
-    pagerduty_request['payload']=dict()
-    pagerduty_request['payload']['summary']="{name} SmokePing {alert} alert: {target}".format(name=args.name, alert=args.alert, target=args.target)
-    pagerduty_request['payload']['source']=args.hostname
-    pagerduty_request['payload']['severity']=args.severity
-    pagerduty_request['payload']['timestamp']=now.isoformat()
-    pagerduty_request['payload']['custom_details']=dict()
-    pagerduty_request['payload']['custom_details']['mtr_command']=mtr_results['cmd']
-    pagerduty_request['payload']['custom_details']['mtr_output']=mtr_results['output']
-    pagerduty_request['payload']['custom_details']['alert_triggered']=args.alert
-    pagerduty_request['payload']['custom_details']['target']=args.target
-    pagerduty_request['payload']['custom_details']['target_hostname']=args.hostname
-    pagerduty_request['payload']['custom_details']['loss_pattern']=args.loss_pattern
-    pagerduty_request['payload']['custom_details']['RTT']=args.rtt
-    pagerduty_request['payload']['custom_details']
-    pagerduty_request['links']=list()
+    pagerduty_request = dict()
+    pagerduty_request['routing_key'] = args.api_key
+    if int(args.edgetrigger) == 1:
+        pagerduty_request['event_action'] = "trigger"
+    elif int(args.edgetrigger) == 0:
+        pagerduty_request['event_action'] = "resolve"
+
+    pagerduty_request['dedup_key'] = args.target
+    pagerduty_request['payload'] = dict()
+    pagerduty_request['payload']['summary'] = "{name} SmokePing {alert} alert: {target}".format(name=args.name, alert=args.alert, target=args.target)
+    pagerduty_request['payload']['source'] = args.hostname
+    pagerduty_request['payload']['severity'] = args.severity
+    pagerduty_request['payload']['timestamp'] = now.isoformat()
+    pagerduty_request['payload']['custom_details'] = dict()
+    pagerduty_request['payload']['custom_details']['mtr_command'] = mtr_results['cmd']
+    pagerduty_request['payload']['custom_details']['mtr_output'] = mtr_results['output']
+    pagerduty_request['payload']['custom_details']['alert_triggered'] = args.alert
+    pagerduty_request['payload']['custom_details']['target'] = args.target
+    pagerduty_request['payload']['custom_details']['target_hostname'] = args.hostname
+    pagerduty_request['payload']['custom_details']['loss_pattern'] = args.loss_pattern
+    pagerduty_request['payload']['custom_details']['RTT'] = args.rtt
+    pagerduty_request['links'] = list()
     pagerduty_request['links'].append({
         'href': 'http://{}/smokeping/smokeping.cgi?target={}'.format(hostname, args.target),
         'text': 'http://{}/smokeping/smokeping.cgi?target={}'.format(hostname, args.target)})
